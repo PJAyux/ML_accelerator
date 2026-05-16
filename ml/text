@@ -1,0 +1,12 @@
+| Operation    | Purpose                      | Notes                       |
+| ------------ | ---------------------------- | --------------------------- |
+| MAC          | Dot product, matrix multiply | Most critical, pipelined    |
+| ADD/SUB      | Bias, residuals              | Often vectorized            |
+| ReLU         | Activation                   | Comparator + mux            |
+| SHIFT        | Quantization, scaling        | Right/left shifts           |
+| COMPARE      | Pooling, ReLU, clipping      | `>`, `<`, `==`              |
+| CLIP/SAT     | Bound values                 | For fixed-point safety      |
+| SIGMOID/TANH | Activation                   | Approximate via LUT         |
+| MAX/ARGMAX   | Classification               | Pooling, softmax, control   |
+| BITWISE      | Control, binary ops          | For BNNs or masks           |
+| POPCOUNT     | Binarized models             | Hardware-efficient counting |
