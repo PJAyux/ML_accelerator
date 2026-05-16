@@ -1,0 +1,594 @@
+This document outlines the architectural and microarchitectural design for a hypothetical High-Performance RISC-V Accelerator (HVAC-1), designed for edge AI inference, aimed at 2026 manufacturing technologies. 
+Hardware Design Document: HVAC-1 Accelerator 
+Date: May 11, 2026Version: 1.0 
+1. Executive Summary 
+The HVAC-1 is a custom ASIC accelerator designed for low-power, high-throughput convolutional neural network (CNN) inference at the edge. It features a 32-bit RISC-V management core, a massive systolic array for matrix multiplication, and dedicated on-chip memory to minimize off-chip DRAM traffic. 
+2. Architecture (High-Level) 
+The architecture defines the instruction set, registers, and memory model, focusing on the hardware-software interface. 
+
+• Instruction Set Architecture (ISA): RISC-V (RV32IMAC) + Custom Convolutional Extensions. 
+• Memory Model: Unified 32-bit address space. 
+• System Components: 
+
+	• Control Processor: RISC-V core handles data flow management and system interrupts. 
+	• Accelerator Core (Systolic Array): $16 \times 16$ array of MAC units. 
+	• Memory Hierarchy: 
+
+		• 32KB L1 Instruction Cache. 
+		• 64KB L1 Data Cache (Shared/Scratchpad). 
+		• 1MB On-chip SRAM (Weight/Feature Buffer). 
+		• AXI4 Controller for External DDR4 DRAM. 
+
+• External Interfaces: AXI4-Lite (Control), AXI4-Stream (Data Input/Output). 
+
+3. Microarchitecture (Internal Implementation) 
+The microarchitecture details the data paths, control logic, and pipeline organization. 
+3.1. Pipeline Organization 
+
+• Type: 5-stage in-order pipeline (Fetch, Decode, Execute, Memory, Writeback). 
+• Hazard Management: Data forwarding logic; stalled 2 cycles for data hazards, 3 cycles for branch misprediction. 
+
+3.2. Data Path & Logic 
+
+• ALU: 32-bit integer arithmetic and logic unit. 
+• Systolic Array: $16 \times 16$ Matrix Multiplier. Each node includes a 16-bit MAC ($Multiplier-Accumulator$). 
+• Register File: $32 \times 32$-bit general-purpose registers. 
+
+3.3. Control Unit 
+
+• Controller: Hardwired control unit for high-speed operation (rather than microcoded). 
+• Branch Prediction: Static (assume taken for backward branches). 
+
+3.4. Memory Microarchitecture 
+
+• SRAM Subsystem: 1MB Buffer partitioned into 8 banks (128KB each) to enable parallel access and avoid bank conflicts during systolic array loading. 
+• DMA Controller: Dedicated DMA for asynchronous movement of feature maps between external DRAM and local SRAM. 
+
+4. Performance & Design Constraints 
+
+• Target Frequency: 1.2 GHz. 
+• Process Technology: 5nm CMOS. 
+• Power Budget: $< 2W$. 
+• Area Goal: $15mm^2$. 
+
+5. Verification & Validation 
+
+• Methodology: Top-down verification. 
+
+	• Level 1 (Architectural): SystemC TLM (Transaction Level Modeling) model to verify ISA and data flow. 
+	• Level 2 (Microarchitectural): SystemVerilog RTL (Register Transfer Level) simulations and UVM environments. 
+	• Level 3 (Physical): Timing analysis, power analysis, and sign-off. 
+
+This document acts as a blueprint for RTL designers and verification engineers. 
+
+AI responses may include mistakes.
+
+
+
+
+
+
+
+
+# Design Document
+
+## RTL Design of a Pipelined Systolic-Array-Based NPU Accelerator
+
+---
+
+# 1. Introduction
+
+This document presents the RTL-level design of a simplified **Neural Processing Unit (NPU)** based on a **pipelined systolic array architecture** for accelerating CNN workloads.
+
+The architecture performs:
+
+* Matrix multiplication
+* Convolution acceleration
+* MAC-based tensor computation
+* Activation and accumulation
+* Layer-to-layer buffering
+
+The design is modular and synthesizable in Verilog.
+
+---
+
+# 2. Design Goals
+
+## Functional Goals
+
+* Accelerate CNN inference
+* Support matrix multiplication
+* Enable pipelined execution
+* Reuse data efficiently
+
+---
+
+## Hardware Goals
+
+* High throughput
+* Low memory bandwidth requirement
+* Modular PE design
+* Parameterizable array size
+
+---
+
+# 3. System Architecture
+
+```text
+                +----------------------+
+                |      Host CPU        |
+                +----------+-----------+
+                           |
+                    PCIe / AXI Interface
+                           |
+                           v
+                +----------------------+
+                |   DMA Controller     |
+                +----------+-----------+
+                           |
+          +----------------+----------------+
+          |                                 |
+          v                                 v
+ +------------------+             +------------------+
+ | External DRAM    |             | On-Chip SRAM     |
+ | Inputs/Weights   |             | Activation Buf   |
+ +------------------+             +--------+---------+
+                                           |
+                                           v
+                                  +------------------+
+                                  | Tiling Controller|
+                                  +--------+---------+
+                                           |
+                                           v
+                                  +------------------+
+                                  | Dataflow Control |
+                                  +--------+---------+
+                                           |
+                                           v
+                           +--------------------------------+
+                           |    Systolic MAC Array          |
+                           |   (NxN Processing Elements)    |
+                           +--------------------------------+
+                                           |
+                                           v
+                                  +------------------+
+                                  | Accumulator Unit |
+                                  +--------+---------+
+                                           |
+                                           v
+                                  +------------------+
+                                  | Activation Unit  |
+                                  +--------+---------+
+                                           |
+                                           v
+                                  +------------------+
+                                  | Pooling Unit     |
+                                  +--------+---------+
+                                           |
+                                           v
+                                  +------------------+
+                                  | Write Back Unit  |
+                                  +------------------+
+```
+
+---
+
+# 4. Processing Element (PE) Architecture
+
+Each PE performs:
+
+[
+Acc = Acc + (A \times B)
+]
+
+---
+
+## PE Internal Blocks
+
+```text
+        +----------------+
+a_in -->| A Register     |
+        +----------------+
+                 |
+                 v
+              [ Multiplier ]
+                 |
+        +----------------+
+b_in -->| B Register     |
+        +----------------+
+                 |
+                 v
+              [ Adder ]
+                 |
+        +----------------+
+        | Accumulator Reg|
+        +----------------+
+                 |
+                 v
+              acc_out
+```
+
+---
+
+# 5. Dataflow
+
+## Systolic Data Movement
+
+| Data Type       | Direction          |
+| --------------- | ------------------ |
+| Activations (A) | Left → Right       |
+| Weights (B)     | Top → Bottom       |
+| Partial Sums    | Local accumulation |
+
+---
+
+## Example
+
+For:
+
+[
+C = A \times B
+]
+
+```text
+A = [1 2]
+    [3 4]
+
+B = [5 6]
+    [7 8]
+```
+
+Computation:
+
+[
+C_{11} = 1\times5 + 2\times7 = 19
+]
+
+---
+
+# 6. Pipeline Design
+
+The architecture is fully pipelined.
+
+---
+
+## Pipeline Stages
+
+| Stage | Operation     |
+| ----- | ------------- |
+| S1    | SRAM Read     |
+| S2    | Data Tiling   |
+| S3    | Register Load |
+| S4    | MAC Multiply  |
+| S5    | Accumulation  |
+| S6    | Activation    |
+| S7    | Pooling       |
+| S8    | Write Back    |
+
+---
+
+## Pipeline Registers
+
+Registers are inserted between stages:
+
+```text
+[S1] → Reg → [S2] → Reg → [S3] ...
+```
+
+This enables:
+
+* Concurrent execution
+* High clock frequency
+* Improved throughput
+
+---
+
+# 7. Memory Architecture
+
+## External DRAM
+
+Stores:
+
+* Weights
+* Input feature maps
+* Final outputs
+
+---
+
+## On-Chip SRAM
+
+Stores:
+
+* Intermediate activations
+* Tiles
+* Partial outputs
+
+---
+
+## Double Buffering
+
+Two SRAM buffers are used:
+
+| Buffer A | Buffer B       |
+| -------- | -------------- |
+| Compute  | Load Next Data |
+
+Buffers swap every cycle.
+
+Benefits:
+
+* Overlap compute and load
+* Remove pipeline stalls
+
+---
+
+# 8. MAC Array Architecture
+
+## NxN PE Grid
+
+```text
+        b0  b1  b2
+         ↓   ↓   ↓
+
+a0 →   [PE][PE][PE]
+         ↓   ↓   ↓
+
+a1 →   [PE][PE][PE]
+         ↓   ↓   ↓
+
+a2 →   [PE][PE][PE]
+```
+
+---
+
+## Features
+
+* Parallel matrix multiplication
+* Local accumulation
+* Pipelined dataflow
+* Data reuse
+
+---
+
+# 9. RTL Design
+
+## Processing Element RTL
+
+```verilog
+module pe #(
+    parameter DATA_WIDTH = 8,
+    parameter ACC_WIDTH  = 32
+)(
+    input clk,
+    input rst,
+
+    input  [DATA_WIDTH-1:0] a_in,
+    input  [DATA_WIDTH-1:0] b_in,
+
+    output reg [DATA_WIDTH-1:0] a_out,
+    output reg [DATA_WIDTH-1:0] b_out,
+
+    output reg [ACC_WIDTH-1:0] acc_out
+);
+
+    reg [DATA_WIDTH-1:0] a_reg, b_reg;
+    reg [ACC_WIDTH-1:0] acc_reg;
+
+    always @(posedge clk) begin
+        if (rst) begin
+            a_reg   <= 0;
+            b_reg   <= 0;
+            acc_reg <= 0;
+        end
+        else begin
+            a_reg <= a_in;
+            b_reg <= b_in;
+
+            acc_reg <= acc_reg + (a_reg * b_reg);
+        end
+    end
+
+    always @(posedge clk) begin
+        a_out  <= a_reg;
+        b_out  <= b_reg;
+        acc_out <= acc_reg;
+    end
+
+endmodule
+```
+
+---
+
+# 10. Systolic Array RTL
+
+```verilog
+module systolic_array #(
+    parameter N = 4,
+    parameter DATA_WIDTH = 8,
+    parameter ACC_WIDTH  = 32
+)(
+    input clk,
+    input rst,
+
+    input  [DATA_WIDTH-1:0] a_in [0:N-1],
+    input  [DATA_WIDTH-1:0] b_in [0:N-1],
+
+    output [ACC_WIDTH-1:0] c_out [0:N-1][0:N-1]
+);
+
+wire [DATA_WIDTH-1:0] a_wire [0:N-1][0:N-1];
+wire [DATA_WIDTH-1:0] b_wire [0:N-1][0:N-1];
+
+genvar i, j;
+
+generate
+    for(i=0;i<N;i=i+1) begin: row
+        for(j=0;j<N;j=j+1) begin: col
+
+            pe #(
+                .DATA_WIDTH(DATA_WIDTH),
+                .ACC_WIDTH(ACC_WIDTH)
+            ) pe_inst (
+                .clk(clk),
+                .rst(rst),
+
+                .a_in((j==0)?a_in[i]:a_wire[i][j-1]),
+                .b_in((i==0)?b_in[j]:b_wire[i-1][j]),
+
+                .a_out(a_wire[i][j]),
+                .b_out(b_wire[i][j]),
+
+                .acc_out(c_out[i][j])
+            );
+
+        end
+    end
+endgenerate
+
+endmodule
+```
+
+---
+
+# 11. Throughput Analysis
+
+For an NxN array:
+
+## MAC Operations Per Cycle
+
+[
+Ops = N^2
+]
+
+Example:
+
+| Array Size | MACs/Cycle |
+| ---------- | ---------- |
+| 4×4        | 16         |
+| 8×8        | 64         |
+| 16×16      | 256        |
+
+---
+
+## Latency
+
+Initial latency:
+
+[
+Latency \approx 2N - 1
+]
+
+After filling:
+
+* One output every cycle
+
+---
+
+# 12. Optimization Techniques
+
+## Quantization
+
+Use:
+
+* INT8
+* INT4
+
+Benefits:
+
+* Lower area
+* Higher speed
+
+---
+
+## Sparsity
+
+Skip zero-valued computations.
+
+---
+
+## Data Reuse
+
+Reuse:
+
+* Weights across rows
+* Inputs across columns
+
+---
+
+## Tiling
+
+Break tensors into SRAM-sized blocks.
+
+---
+
+# 13. Applications
+
+* CNN acceleration
+* Edge AI
+* Object detection
+* Image classification
+* Transformer acceleration
+
+---
+
+# 14. Advantages
+
+✔ High throughput
+✔ Efficient matrix multiplication
+✔ Regular routing structure
+✔ Scalable architecture
+✔ Energy-efficient data reuse
+
+---
+
+# 15. Limitations
+
+✘ Large SRAM requirement
+✘ Memory bandwidth bottleneck
+✘ Fixed dataflow flexibility
+✘ High utilization needed for efficiency
+
+---
+
+# 16. Future Improvements
+
+* AXI interface integration
+* Winograd convolution
+* Dynamic sparsity support
+* Mixed precision compute
+* Transformer optimization
+* HBM integration
+
+---
+
+# 17. Conclusion
+
+This design implements a scalable pipelined systolic-array-based NPU accelerator capable of efficient CNN computation using parallel MAC arrays, optimized dataflow, and hierarchical memory reuse. The modular RTL enables FPGA or ASIC implementation for AI acceleration workloads.
+
+
+
+
+
+
+
+I’ve created a complete design document for your **NIRVANA ML Accelerator** project, covering:
+
+* Architecture overview
+* Custom RISC-V ISA extensions
+* Datapath design
+* Matrix multiplication accelerator
+* BNN acceleration
+* FSM control
+* Instruction fetch unit
+* UART + FIFO integration
+* Quantization support
+* Verification flow
+* Applications and future scope
+
+It’s structured in a professional research/project-report style suitable for:
+
+* CV support
+* Internship applications
+* GitHub documentation
+* Project reports
+* Research posters/presentations

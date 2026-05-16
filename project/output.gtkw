@@ -1,0 +1,44 @@
+[*]
+[*] GTKWave Analyzer v3.3.100 (w)1999-2019 BSI
+[*] Fri May 15 07:57:21 2026
+[*]
+[dumpfile] "C:\Users\ASUS\Desktop\electronics\project\waveform.vcd"
+[savefile] "C:\Users\ASUS\Desktop\electronics\project\output.gtkw"
+[timestart] 1033900
+[size] 1536 793
+[pos] -61 -61
+*-16.000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] execute_top_tb.
+[treeopen] execute_top_tb.dut.
+[sst_width] 197
+[signals_width] 174
+[sst_expanded] 1
+[sst_vpaned_height] 221
+@28
+execute_top_tb.clk
+execute_top_tb.bigclk
+@22
+execute_top_tb.reg_a[7:0]
+execute_top_tb.reg_b[7:0]
+@28
+execute_top_tb.rst
+@22
+execute_top_tb.opcode[3:0]
+execute_top_tb.cout[31:0]
+@23
+execute_top_tb.dut.bnn_out[31:0]
+execute_top_tb.dut.clip_out[31:0]
+execute_top_tb.dut.dot_prod_out[31:0]
+execute_top_tb.dut.mac_out[31:0]
+@29
+execute_top_tb.dut.max_index[2:0]
+@23
+execute_top_tb.dut.max_value[31:0]
+execute_top_tb.dut.mult_result[31:0]
+execute_top_tb.dut.popcount_out[31:0]
+execute_top_tb.dut.relu_out[31:0]
+execute_top_tb.dut.scaling_out[31:0]
+execute_top_tb.dut.sigmoid_out[31:0]
+execute_top_tb.dut.tanh_out[31:0]
+[pattern_trace] 1
+[pattern_trace] 0
